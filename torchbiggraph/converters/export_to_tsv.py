@@ -12,12 +12,12 @@ from typing import Iterable, TextIO
 from torchbiggraph.checkpoint_manager import CheckpointManager
 from torchbiggraph.config import ConfigFileLoader, ConfigSchema
 from torchbiggraph.graph_storages import (
-    AbstractEntityStorage,
-    AbstractRelationTypeStorage,
     ENTITY_STORAGES,
     RELATION_TYPE_STORAGES,
+    AbstractEntityStorage,
+    AbstractRelationTypeStorage,
 )
-from torchbiggraph.model import make_model, MultiRelationEmbedder
+from torchbiggraph.model import MultiRelationEmbedder, make_model
 
 
 def write(outf: TextIO, key: Iterable[str], value: Iterable[float]) -> None:
@@ -85,10 +85,10 @@ def make_tsv_for_relation_types(
     print("Writing relation type parameters...")
     relation_types = relation_type_storage.load_names()
     if model.num_dynamic_rels > 0:
-        (rel_t_config,) = model.relations
+        rel_t_config, = model.relations
         op_name = rel_t_config.operator
-        (lhs_operator,) = model.lhs_operators
-        (rhs_operator,) = model.rhs_operators
+        lhs_operator, = model.lhs_operators
+        rhs_operator, = model.rhs_operators
         for side, operator in [("lhs", lhs_operator), ("rhs", rhs_operator)]:
             for param_name, all_params in operator.named_parameters():
                 for rel_t_name, param in zip(relation_types, all_params):
@@ -96,7 +96,7 @@ def make_tsv_for_relation_types(
                     write(
                         relation_types_tf,
                         (rel_t_name, side, op_name, param_name, shape),
-                        param.flatten(),
+                        param,
                     )
     else:
         for rel_t_name, rel_t_config, operator in zip(
@@ -113,7 +113,7 @@ def make_tsv_for_relation_types(
                 write(
                     relation_types_tf,
                     (rel_t_name, "rhs", op_name, param_name, shape),
-                    param.flatten(),
+                    param,
                 )
 
     relation_types_output_filename = getattr(

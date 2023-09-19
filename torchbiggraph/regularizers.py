@@ -50,7 +50,8 @@ REGULARIZERS = PluginRegistry[AbstractRegularizer]()
 
 @REGULARIZERS.register_as("N3")
 class N3Regularizer(AbstractRegularizer):
-    """N3 regularizer described in https://arxiv.org/pdf/1806.07297.pdf"""
+    """N3 regularizer described in https://arxiv.org/pdf/1806.07297.pdf
+    """
 
     def reg_embs(
         self, src_pos: FloatTensorType, dst_pos: FloatTensorType
@@ -72,8 +73,7 @@ class N3Regularizer(AbstractRegularizer):
         total = 0
         operator_params = operator.get_operator_params_for_reg(rel_idxs)
         if operator_params is not None:
-            operator_params = operator_params.to(src_pos.device)
-            total += torch.sum(operator_params**3)
+            total += torch.sum(operator_params ** 3)
         for x in (src_pos, dst_pos):
             total += torch.sum(operator.prepare_embs_for_reg(x) ** 3)
         total *= self.weight
@@ -88,9 +88,8 @@ class N3Regularizer(AbstractRegularizer):
         total = 0
         operator_params = operator.get_operator_params_for_reg()
         if operator_params is not None:
-            operator_params = operator_params.to(src_pos.device)
             batch_size = len(src_pos)
-            total += torch.sum(operator_params**3) * batch_size
+            total += torch.sum(operator_params ** 3) * batch_size
         for x in (src_pos, dst_pos):
             total += torch.sum(operator.prepare_embs_for_reg(x) ** 3)
         total *= self.weight

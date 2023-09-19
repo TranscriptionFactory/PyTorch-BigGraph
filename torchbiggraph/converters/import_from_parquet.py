@@ -11,8 +11,8 @@ from pathlib import Path
 
 from torchbiggraph.config import ConfigFileLoader, ConfigSchema
 from torchbiggraph.converters.importers import (
-    convert_input_data,
     ParquetEdgelistReader,
+    convert_input_data,
     parse_config_partial,
 )
 
@@ -59,13 +59,7 @@ def main():
     loader = ConfigFileLoader()
     config_dict = loader.load_raw_config(opt.config, opt.param)
 
-    (
-        entity_configs,
-        relation_configs,
-        entity_path,
-        edge_paths,
-        dynamic_relations,
-    ) = parse_config_partial(  # noqa
+    entity_configs, relation_configs, entity_path, edge_paths, dynamic_relations = parse_config_partial(  # noqa
         config_dict
     )
 

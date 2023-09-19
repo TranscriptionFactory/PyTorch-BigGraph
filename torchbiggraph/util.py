@@ -206,34 +206,28 @@ class CouldNotLoadData(Exception):
     pass
 
 
-# Directly allocate a tensor on shared memory (instead of first allocating on
-# private memory and then converting, which uses twice the memory at peak, which
-# we cannot afford)
 def allocate_shared_tensor(shape: Iterable[int], *, dtype: torch.dtype) -> torch.Tensor:
-    tensor = torch.empty((0,), dtype=dtype)
+    dummy_tensor = torch.empty((0,), dtype=dtype)
+    storage_type = dummy_tensor.storage_type()
+    module, tensor_type_name = dummy_tensor.type().split(".")
+    assert module == "torch"
+    tensor_type = getattr(torch, tensor_type_name)
     size = torch.Size(shape)
-    try:
-        # Post https://github.com/pytorch/pytorch/pull/59671 implementation
-        storage = torch.ByteStorage._new_shared(
-            nbytes=size.numel() * tensor.element_size()
-        )
-    except TypeError:
-        # Old and no longer working implementation
-        storage = tensor.storage_type()._new_shared(size.numel())
-    tensor.set_(storage, 0, size)
+    storage = storage_type._new_shared(size.numel())
+    tensor = tensor_type(storage).view(size)
     return tensor
 
 
 def split_almost_equally(size: int, *, num_parts: int) -> Iterable[slice]:
     """Split an interval of the given size into the given number of subintervals
 
-    The sizes of the subintervals will at most the ceil of the exact fractional
-    size, with later subintervals possibly being smaller (or even empty).
+    The sizes of the subintervals will be between the floor and the ceil of the
+    "exact" fractional size, with larger intervals preceding smaller ones.
 
     """
     size_per_part = size // num_parts + (1 if size % num_parts != 0 else 0)
     for i in range(num_parts):
-        yield slice(min(i * size_per_part, size), min((i + 1) * size_per_part, size))
+        yield slice(i * size_per_part, min((i + 1) * size_per_part, size))
 
 
 def div_roundup(num: int, denom: int) -> int:

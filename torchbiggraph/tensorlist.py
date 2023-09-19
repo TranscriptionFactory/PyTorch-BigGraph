@@ -45,7 +45,7 @@ def _extract_intervals(offsets, sizes, data):
     return new_offsets, res
 
 
-class TensorList:
+class TensorList(object):
     """A list of tensors of different sizes, backed by a (offset, size, data)
     tuple.
 
@@ -80,6 +80,12 @@ class TensorList:
         assert offsets.ndimension() == 1
         assert offsets[0] == 0
         assert offsets[-1] == (data.size(0) if data.ndimension() > 0 else 0)
+
+        # FIXME temporary workaround for below PyTorch bug
+        # https://github.com/pytorch/pytorch/issues/5719
+        if data.numel() == 0 and data.storage().size() == 0:
+            storage = data.storage()
+            storage.resize_(storage.size() + 1)
 
         self.offsets = offsets
         self.data = data

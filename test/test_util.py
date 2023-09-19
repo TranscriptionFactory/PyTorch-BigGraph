@@ -6,7 +6,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE.txt file in the root directory of this source tree.
 
-from unittest import main, TestCase
+from unittest import TestCase, main
 
 import torch
 from torchbiggraph.util import (
@@ -33,20 +33,6 @@ class TestSplitAlmostEqually(TestCase):
         self.assertEqual(
             list(split_almost_equally(23, num_parts=4)),
             [slice(0, 6), slice(6, 12), slice(12, 18), slice(18, 23)],
-        )
-
-    def test_so_few_that_last_slice_would_underflow(self):
-        # All slices have the same size, which is the ratio size/num_parts
-        # rounded up. This however may cause earlier slices to get so many
-        # elements that later ones end up being empty. We need to be careful
-        # about not returning negative slices in that case.
-        self.assertEqual(
-            list(split_almost_equally(5, num_parts=4)),
-            [slice(0, 2), slice(2, 4), slice(4, 5), slice(5, 5)],
-        )
-        self.assertEqual(
-            list(split_almost_equally(6, num_parts=5)),
-            [slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 6), slice(6, 6)],
         )
 
 

@@ -56,6 +56,15 @@ class IdentityOperator(AbstractOperator):
     def get_operator_params_for_reg(self) -> Optional[FloatTensorType]:
         return None
 
+@OPERATORS.register_as("fix")
+class FixOperator(AbstractOperator):
+    # Detach node tensor that the loss isn't propagated to the node embedding.
+    def forward(self, embeddings: FloatTensorType) -> FloatTensorType:
+        match_shape(embeddings, ..., self.dim)
+        return embeddings.clone().detach()
+
+    def get_operator_params_for_reg(self) -> Optional[FloatTensorType]:
+        return None
 
 @OPERATORS.register_as("diagonal")
 class DiagonalOperator(AbstractOperator):
@@ -150,12 +159,12 @@ class ComplexDiagonalOperator(AbstractOperator):
         return prod
 
     def get_operator_params_for_reg(self) -> Optional[FloatTensorType]:
-        return torch.sqrt(self.real**2 + self.imag**2)
+        return torch.sqrt(self.real ** 2 + self.imag ** 2)
 
     def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
         assert embs.shape[-1] == self.dim
         real, imag = embs[..., : self.dim // 2], embs[..., self.dim // 2 :]
-        return torch.sqrt(real**2 + imag**2)
+        return torch.sqrt(real ** 2 + imag ** 2)
 
 
 class AbstractDynamicOperator(nn.Module, ABC):
@@ -337,7 +346,7 @@ class ComplexDiagonalDynamicOperator(AbstractDynamicOperator):
     def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
         assert embs.shape[-1] == self.dim
         real, imag = embs[..., : self.dim // 2], embs[..., self.dim // 2 :]
-        return torch.sqrt(real**2 + imag**2)
+        return torch.sqrt(real ** 2 + imag ** 2)
 
 
 def instantiate_operator(

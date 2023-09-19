@@ -11,14 +11,14 @@ import logging
 from typing import Callable, List, Optional
 
 import torch.distributed as td
-from torchbiggraph.config import add_to_sys_path, ConfigFileLoader, ConfigSchema
-from torchbiggraph.distributed import init_process_group, ProcessRanks
-from torchbiggraph.parameter_sharing import ParameterServer, ShardedParameterServer
-from torchbiggraph.types import Rank, SINGLE_TRAINER
+from torchbiggraph.config import ConfigFileLoader, ConfigSchema, add_to_sys_path
+from torchbiggraph.distributed import ProcessRanks, init_process_group
+from torchbiggraph.parameter_sharing import ParameterServer
+from torchbiggraph.types import SINGLE_TRAINER, Rank
 from torchbiggraph.util import (
+    SubprocessInitializer,
     set_logging_verbosity,
     setup_logging,
-    SubprocessInitializer,
     tag_logs_with_process_name,
 )
 
@@ -50,12 +50,7 @@ def run_partition_server(
         config.num_machines, config.num_partition_servers
     )
 
-    if config.num_partition_servers > config.num_machines:
-        num_ps_groups = config.num_partition_servers * (
-            config.num_groups_per_sharded_partition_server + 1
-        )
-    else:
-        num_ps_groups = config.num_groups_for_partition_server
+    num_ps_groups = config.num_groups_for_partition_server
     groups: List[List[int]] = [ranks.trainers]  # barrier group
     groups += [ranks.trainers + ranks.partition_servers] * num_ps_groups  # ps groups
     group_idxs_for_partition_servers = range(1, len(groups))
@@ -68,19 +63,11 @@ def run_partition_server(
         init_method=config.distributed_init_method,
         groups=groups,
     )
-    if config.num_partition_servers > config.num_machines:
-        ps = ShardedParameterServer(
-            num_clients=len(ranks.trainers),
-            num_data_pgs=config.num_groups_per_sharded_partition_server,
-            group_idxs=group_idxs_for_partition_servers,
-            log_stats=True,
-        )
-    else:
-        ps = ParameterServer(
-            num_clients=len(ranks.trainers),
-            group_idxs=group_idxs_for_partition_servers,
-            log_stats=True,
-        )
+    ps = ParameterServer(
+        num_clients=len(ranks.trainers),
+        group_idxs=group_idxs_for_partition_servers,
+        log_stats=True,
+    )
     ps.start(groups)
     logger.info("ps.start done")
 

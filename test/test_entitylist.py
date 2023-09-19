@@ -7,7 +7,7 @@
 # LICENSE.txt file in the root directory of this source tree.
 
 from typing import Sequence
-from unittest import main, TestCase
+from unittest import TestCase, main
 
 import torch
 from torchbiggraph.entitylist import EntityList

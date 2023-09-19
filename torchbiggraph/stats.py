@@ -8,7 +8,7 @@
 
 from collections import defaultdict
 from statistics import mean
-from typing import cast, Dict, Iterable, Optional, Type, Union
+from typing import Dict, Iterable, Optional, Type, Union, cast
 
 from torchbiggraph.types import FloatTensorType
 
@@ -39,7 +39,9 @@ class Stats:
 
     @classmethod
     def sum(cls: Type["Stats"], stats: Iterable["Stats"]) -> "Stats":
-        """Return a stats whose metrics are the sums of the given stats."""
+        """Return a stats whose metrics are the sums of the given stats.
+
+        """
         total_metrics = defaultdict(lambda: 0)
         for s in stats:
             for k, v in s.metrics.items():
@@ -47,7 +49,9 @@ class Stats:
         return cls(count=sum(s.count for s in stats), **total_metrics)
 
     def average(self) -> "Stats":
-        """Return these stats with all metrics, except count, averaged."""
+        """Return these stats with all metrics, except count, averaged.
+
+        """
         if self.count == 0:
             return self
         return type(self)(
@@ -56,7 +60,8 @@ class Stats:
 
     @classmethod
     def average_list(cls: Type["Stats"], stats: Iterable["Stats"]) -> "Stats":
-        """Return a stats whose metrics are the average of all stats."""
+        """Return a stats whose metrics are the average of all stats.
+        """
 
         return cls.sum([s * s.count for s in stats]).average()
 

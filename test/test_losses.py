@@ -11,7 +11,7 @@
 # disable only those two checks but there doesn't seem to be a way to do so.
 # flake8: noqa
 
-from unittest import main, TestCase
+from unittest import TestCase, main
 
 import torch
 from torchbiggraph.losses import (

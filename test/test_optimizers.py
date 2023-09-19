@@ -12,9 +12,7 @@
 # flake8: noqa
 
 import logging
-import os
-import unittest
-from unittest import main, TestCase
+from unittest import TestCase, main
 
 import torch
 import torch.multiprocessing as mp
@@ -54,14 +52,14 @@ def do_optim(model, optimizer, N, rank):
 
 
 class TestOptimizers(TensorTestCase):
-    def _stress_optimizer(self, model, optimizer, num_processes=1, iterations=100):
+    def _stress_optimizer(self, model, optimizer, num_processes=1):
         logger.info("_stress_optimizer begin")
         processes = []
         for rank in range(num_processes):
             p = mp.get_context("spawn").Process(
                 name=f"Process-{rank}",
                 target=do_optim,
-                args=(model, optimizer, iterations, rank),
+                args=(model, optimizer, 100, rank),
             )
             p.start()
             self.addCleanup(p.terminate)
@@ -82,49 +80,38 @@ class TestOptimizers(TensorTestCase):
     #     # This fails for Adagrad because it's not stable
     #     self.assertLess(model.weight.abs().max(), 1000)
 
-    @unittest.skipIf(os.environ.get("CIRCLECI_TEST") == "1", "Hangs in CircleCI")
     def testHogwildStability_AsyncAdagrad(self):
         NE = 10000
         model = nn.Embedding(NE, 100)
         optimizer = AsyncAdagrad(model.parameters())
         num_processes = mp.cpu_count() // 2 + 1
-        self._stress_optimizer(
-            model, optimizer, num_processes=num_processes, iterations=50
-        )
+        self._stress_optimizer(model, optimizer, num_processes=num_processes)
 
         self.assertLess(model.weight.abs().max(), 1000)
 
-    @unittest.skipIf(os.environ.get("CIRCLECI_TEST") == "1", "Hangs in CircleCI")
     def testHogwildStability_RowAdagrad(self):
         NE = 10000
         model = nn.Embedding(NE, 100)
         optimizer = RowAdagrad(model.parameters())
         num_processes = mp.cpu_count() // 2 + 1
-        self._stress_optimizer(
-            model, optimizer, num_processes=num_processes, iterations=50
-        )
+        self._stress_optimizer(model, optimizer, num_processes=num_processes)
 
         # This fails for Adagrad because it's not stable
         self.assertLess(model.weight.abs().max(), 1000)
 
-    def _assert_testAccuracy_AsyncAdagrad(self, sparse):
-        # testing that Adagrad = AsyncAdagrad with 1 process
-        NE = 10000
-        golden_model = nn.Embedding(NE, 100, sparse=sparse)
-        test_model = nn.Embedding(NE, 100, sparse=sparse)
-        test_model.load_state_dict(golden_model.state_dict())
+    def testAccuracy_AsyncAdagrad(self):
+        for sparse in (True, False):
+            # testing that Adagrad = AsyncAdagrad with 1 process
+            NE = 10000
+            golden_model = nn.Embedding(NE, 100, sparse=sparse)
+            test_model = nn.Embedding(NE, 100, sparse=sparse)
+            test_model.load_state_dict(golden_model.state_dict())
 
-        golden_optimizer = Adagrad(golden_model.parameters())
-        self._stress_optimizer(golden_model, golden_optimizer, num_processes=1)
+            golden_optimizer = Adagrad(golden_model.parameters())
+            self._stress_optimizer(golden_model, golden_optimizer, num_processes=1)
 
-        test_optimizer = AsyncAdagrad(test_model.parameters())
-        self._stress_optimizer(test_model, test_optimizer, num_processes=1)
+            test_optimizer = AsyncAdagrad(test_model.parameters())
+            self._stress_optimizer(test_model, test_optimizer, num_processes=1)
 
-        # This fails for Adagrad because it's not stable
-        self.assertTensorEqual(golden_model.weight, test_model.weight)
-
-    def testAccuracy_AsyncAdagrad_sprase_true(self):
-        self._assert_testAccuracy_AsyncAdagrad(sparse=True)
-
-    def testAccuracy_AsyncAdagrad_sprase_false(self):
-        self._assert_testAccuracy_AsyncAdagrad(sparse=False)
+            # This fails for Adagrad because it's not stable
+            self.assertTensorEqual(golden_model.weight, test_model.weight)

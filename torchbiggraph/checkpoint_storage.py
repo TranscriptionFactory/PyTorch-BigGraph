@@ -18,7 +18,7 @@ import numpy as np
 import torch
 from torchbiggraph.plugin import URLPluginRegistry
 from torchbiggraph.types import EntityName, FloatTensorType, ModuleStateDict, Partition
-from torchbiggraph.util import allocate_shared_tensor, CouldNotLoadData
+from torchbiggraph.util import CouldNotLoadData, allocate_shared_tensor
 
 
 logger = logging.getLogger("torchbiggraph")
@@ -191,7 +191,7 @@ def save_model_state_dict(hf: h5py.File, state_dict: Dict[str, ModelParameter]) 
         dataset.attrs[STATE_DICT_KEY_ATTR] = param.private_name
 
 
-def load_model_state_dict(hf: h5py.File) -> Optional[ModuleStateDict]:
+def load_model_state_dict(hf: h5py.File,) -> Optional[ModuleStateDict]:
     if MODEL_STATE_DICT_GROUP not in hf:
         return None
     g = hf[MODEL_STATE_DICT_GROUP]

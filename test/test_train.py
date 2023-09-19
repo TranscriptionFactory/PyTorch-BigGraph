@@ -7,7 +7,7 @@
 # LICENSE.txt file in the root directory of this source tree.
 
 from itertools import product
-from unittest import main, TestCase
+from unittest import TestCase, main
 
 from torchbiggraph.train_cpu import IterationManager
 

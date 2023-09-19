@@ -1,5 +1,5 @@
 # Changelog
 
-## main
+## master
 
 Initial version

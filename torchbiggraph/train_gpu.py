@@ -7,7 +7,6 @@
 # LICENSE.txt file in the root directory of this source tree.
 
 import ctypes
-import ctypes.util
 import logging
 import os
 import time
@@ -17,8 +16,9 @@ from typing import Callable, Dict, List, NamedTuple, Optional, Set, Tuple
 
 import torch
 import torch.multiprocessing as mp
+from torchbiggraph import _C
 from torchbiggraph.batching import AbstractBatchProcessor, process_in_batches
-from torchbiggraph.config import add_to_sys_path, ConfigFileLoader, ConfigSchema
+from torchbiggraph.config import ConfigFileLoader, ConfigSchema, add_to_sys_path
 from torchbiggraph.edgelist import EdgeList
 from torchbiggraph.entitylist import EntityList
 from torchbiggraph.graph_storages import EDGE_STORAGES, ENTITY_STORAGES
@@ -28,6 +28,7 @@ from torchbiggraph.row_adagrad import RowAdagrad
 from torchbiggraph.stats import Stats, StatsHandler
 from torchbiggraph.train_cpu import Trainer, TrainingCoordinator
 from torchbiggraph.types import (
+    SINGLE_TRAINER,
     Bucket,
     EntityName,
     FloatTensorType,
@@ -38,16 +39,16 @@ from torchbiggraph.types import (
     Partition,
     Rank,
     Side,
-    SINGLE_TRAINER,
     SubPartition,
 )
 from torchbiggraph.util import (
-    allocate_shared_tensor,
     BucketLogger,
-    create_pool,
-    div_roundup,
     DummyOptimizer,
     EmbeddingHolder,
+    SubprocessInitializer,
+    allocate_shared_tensor,
+    create_pool,
+    div_roundup,
     fast_approx_rand,
     get_async_result,
     get_num_workers,
@@ -56,17 +57,8 @@ from torchbiggraph.util import (
     set_logging_verbosity,
     setup_logging,
     split_almost_equally,
-    SubprocessInitializer,
     tag_logs_with_process_name,
 )
-
-
-try:
-    from torchbiggraph import _C
-
-    CPP_INSTALLED = True
-except ImportError:
-    CPP_INSTALLED = False
 
 
 logger = logging.getLogger("torchbiggraph")
@@ -79,7 +71,7 @@ class TimeKeeper:
         self.sub_ts = {}
 
     def _get_time(self) -> float:
-        return time.monotonic()
+        return time.monotonic_ns() / 1e9
 
     def start(self, name: str) -> None:
         self.sub_ts[name] = self._get_time()
@@ -130,7 +122,6 @@ class GPUProcess(mp.get_context("spawn").Process):
     ) -> None:
         super().__init__(daemon=True, name=f"GPU #{gpu_idx}")
         self.gpu_idx = gpu_idx
-
         self.master_endpoint, self.worker_endpoint = mp.get_context("spawn").Pipe()
         self.subprocess_init = subprocess_init
         self.sub_holder: Dict[
@@ -149,11 +140,15 @@ class GPUProcess(mp.get_context("spawn").Process):
         if self.subprocess_init is not None:
             self.subprocess_init()
         self.master_endpoint.close()
-
         for s in self.embedding_storage_freelist:
             assert s.is_shared()
-            cudart = torch.cuda.cudart()
-            res = cudart.cudaHostRegister(s.data_ptr(), s.size() * s.element_size(), 0)
+            cptr = ctypes.c_void_p(s.data_ptr())
+            csize = ctypes.c_size_t(s.size() * s.element_size())
+            cflags = ctypes.c_uint(0)
+            # FIXME: broken by D20249187
+            # cudart = torch.cuda.cudart()
+            cudart = ctypes.cdll.LoadLibrary(None)
+            res = cudart.cudaHostRegister(cptr, csize, cflags)
             torch.cuda.check_error(res)
             assert s.is_pinned()
         logger.info(f"GPU subprocess {self.gpu_idx} up and running")
@@ -309,9 +304,7 @@ class GPUProcess(mp.get_context("spawn").Process):
             optimizer = trainer.partitioned_optimizers[entity_name, part]
             subpart_slice = subpart_slices[entity_name, part, subpart]
 
-            embeddings[subpart_slice].data.copy_(
-                gpu_embeddings.detach(), non_blocking=True
-            )
+            embeddings[subpart_slice].copy_(gpu_embeddings.detach(), non_blocking=True)
             del gpu_embeddings
             (cpu_state,) = optimizer.state.values()
             (gpu_state,) = gpu_optimizer.state.values()
@@ -430,12 +423,6 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         )
 
         assert config.num_gpus > 0
-        if not CPP_INSTALLED:
-            raise RuntimeError(
-                "GPU support requires C++ installation: "
-                "install with C++ support by running "
-                "`PBG_INSTALL_CPP=1 pip install .`"
-            )
 
         if config.half_precision:
             for entity in config.entities:
@@ -492,17 +479,11 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         edges_lhs = edges.lhs.tensor
         edges_rhs = edges.rhs.tensor
         edges_rel = edges.rel
-        eval_edges_lhs = None
-        eval_edges_rhs = None
-        eval_edges_rel = None
         assert edges.weight is None, "Edge weights not implemented in GPU mode yet"
         if eval_edge_idxs is not None:
             bucket_logger.debug("Removing eval edges")
             tk.start("remove_eval")
             num_eval_edges = len(eval_edge_idxs)
-            eval_edges_lhs = edges_lhs[eval_edge_idxs]
-            eval_edges_rhs = edges_rhs[eval_edge_idxs]
-            eval_edges_rel = edges_rel[eval_edge_idxs]
             edges_lhs[eval_edge_idxs] = edges_lhs[-num_eval_edges:].clone()
             edges_rhs[eval_edge_idxs] = edges_rhs[-num_eval_edges:].clone()
             edges_rel[eval_edge_idxs] = edges_rel[-num_eval_edges:].clone()
@@ -619,7 +600,6 @@ class GPUTrainingCoordinator(TrainingCoordinator):
 
         for gpu_idx in range(self.gpu_pool.num_gpus):
             schedule(gpu_idx)
-
         while busy_gpus:
             gpu_idx, result = self.gpu_pool.wait_for_next()
             assert gpu_idx == result.gpu_idx
@@ -657,16 +637,6 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         bucket_logger.debug(
             f"Time spent mapping embeddings back from sub-buckets: {tk.stop('rev_perm'):.4f} s"
         )
-
-        if eval_edge_idxs is not None:
-            bucket_logger.debug("Restoring eval edges")
-            tk.start("restore_eval")
-            edges.lhs.tensor[eval_edge_idxs] = eval_edges_lhs
-            edges.rhs.tensor[eval_edge_idxs] = eval_edges_rhs
-            edges.rel[eval_edge_idxs] = eval_edges_rel
-            bucket_logger.debug(
-                f"Time spent restoring eval edges: {tk.stop('restore_eval'):.4f} s"
-            )
 
         logger.debug(
             f"_coordinate_train: Time unaccounted for: {tk.unaccounted():.4f} s"

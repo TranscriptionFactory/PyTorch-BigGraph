@@ -6,11 +6,12 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE.txt file in the root directory of this source tree.
 
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Sequence, Union
+from typing import Optional
 
 import torch
 from torchbiggraph.entitylist import EntityList
-from torchbiggraph.types import FloatTensorType, LongTensorType
+from torchbiggraph.types import LongTensorType
 
 
 class EdgeList:
@@ -37,7 +38,7 @@ class EdgeList:
         if all(el.has_scalar_relation_type() for el in edge_lists):
             rel_types = {el.get_relation_type_as_scalar() for el in edge_lists}
             if len(rel_types) == 1:
-                (rel_type,) = rel_types
+                rel_type, = rel_types
                 return cls(
                     cat_lhs,
                     cat_rhs,
@@ -45,7 +46,6 @@ class EdgeList:
                     cat_weight,
                 )
         cat_rel = torch.cat([el.rel.expand((len(el),)) for el in edge_lists])
-
         return cls(cat_lhs, cat_rhs, cat_rel, cat_weight)
 
     def __init__(
@@ -53,7 +53,7 @@ class EdgeList:
         lhs: EntityList,
         rhs: EntityList,
         rel: LongTensorType,
-        weight: Optional[FloatTensorType] = None,
+        weight: Optional[LongTensorType] = None,
     ) -> None:
         if not isinstance(lhs, EntityList) or not isinstance(rhs, EntityList):
             raise TypeError(

@@ -75,9 +75,8 @@ class LogisticLossFunction(AbstractLossFunction):
             neg_scores,
             neg_scores.new_zeros(()).expand(num_pos, num_neg),
             reduction="sum",
-            weight=weight.unsqueeze(-1) if weight is not None else None,
+            weight=weight.unsqueeze(-1) if weight is not None else None
         )
-
         loss = pos_loss + neg_weight * neg_loss
 
         return loss
@@ -147,7 +146,7 @@ class SoftmaxLossFunction(AbstractLossFunction):
         if weight is not None:
             loss_per_sample = F.cross_entropy(
                 scores,
-                pos_scores.new_zeros((num_pos,), dtype=torch.long),
+                pos_scores.new_zeros((), dtype=torch.long).expand(num_pos),
                 reduction="none",
             )
             match_shape(weight, num_pos)
@@ -155,7 +154,7 @@ class SoftmaxLossFunction(AbstractLossFunction):
         else:
             loss_per_sample = F.cross_entropy(
                 scores,
-                pos_scores.new_zeros((num_pos,), dtype=torch.long),
+                pos_scores.new_zeros((), dtype=torch.long).expand(num_pos),
                 reduction="sum",
             )
 

@@ -23,7 +23,7 @@ from torchbiggraph.entitylist import EntityList
 from torchbiggraph.plugin import URLPluginRegistry
 from torchbiggraph.tensorlist import TensorList
 from torchbiggraph.types import Partition
-from torchbiggraph.util import allocate_shared_tensor, CouldNotLoadData, div_roundup
+from torchbiggraph.util import CouldNotLoadData, allocate_shared_tensor, div_roundup
 
 
 logger = logging.getLogger("torchbiggraph")
@@ -127,12 +127,7 @@ class AbstractEdgeStorage(ABC):
 
     @abstractmethod
     def load_chunk_of_edges(
-        self,
-        lhs_p: Partition,
-        rhs_p: Partition,
-        chunk_idx: int,
-        num_chunks: int,
-        shared: bool,
+        self, lhs_p: Partition, rhs_p: Partition, chunk_idx: int, num_chunks: int
     ) -> EdgeList:
         pass
 
@@ -264,7 +259,7 @@ def torch_to_numpy_dtype(dtype):
 class BufferedDataset:
 
     DATA_TYPE = torch.long  # int64, 8 bytes
-    BUFFER_SIZE = 50 * 2**20 // 8  # 50MiB
+    BUFFER_SIZE = 50 * 2 ** 20 // 8  # 50MiB
 
     def __init__(self, hf: h5py.File, dataset_name: str) -> None:
         self.hf: h5py.File = hf
@@ -296,7 +291,7 @@ class BufferedDataset:
         self.buffer_offset = 0
 
     def append(self, tensor: torch.Tensor) -> None:
-        (tensor_size,) = tensor.shape
+        tensor_size, = tensor.shape
         tensor_offset = 0
         while True:
             tensor_left = tensor_size - tensor_offset
@@ -443,7 +438,6 @@ class FileEdgeStorage(AbstractEdgeStorage):
 
                 lhsd = self.read_dynamic(hf, "lhsd", begin, end, shared=shared)
                 rhsd = self.read_dynamic(hf, "rhsd", begin, end, shared=shared)
-
                 if "weight" in hf:
                     weight_ds = hf["weight"]
                     weight = allocator((chunk_size,), dtype=torch.long)
@@ -456,6 +450,7 @@ class FileEdgeStorage(AbstractEdgeStorage):
                 return EdgeList(
                     EntityList(lhs, lhsd), EntityList(rhs, rhsd), rel, weight
                 )
+
         except OSError as err:
             # h5py refuses to make it easy to figure out what went wrong. The errno
             # attribute is set to None. See https://github.com/h5py/h5py/issues/493.
